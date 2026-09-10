@@ -371,61 +371,22 @@ The project intentionally keeps the frontend simple so the focus remains on the 
 ## Architecture
 
 ```text
-┌─────────────────────────────┐
-│        React + Vite         │
-│      Vercel Frontend        │
-└──────────────┬──────────────┘
-               │
-               │ REST API
-               ▼
-┌─────────────────────────────┐
-│          FastAPI            │
-│      Railway Backend        │
-└──────────────┬──────────────┘
-               │
-               ▼
-       ┌───────────────┐
-       │ Sales Manager │
-       │ Orchestrator  │
-       └───────┬───────┘
-               │
-       ┌───────┴────────┐
-       ▼                ▼
-┌─────────────┐   ┌─────────────┐
-│ CRM         │   │ Research    │
-│ Specialist  │   │ Specialist  │
-└──────┬──────┘   └──────┬──────┘
-       │                  │
-       └────────┬─────────┘
-                ▼
-      Daily Pipeline Review
-
-Protected CRM Write Path:
-
-Agent
-  ↓
-Tool Guardrail
-  ↓
-HITL Approval
-  ↓
-Persisted RunState
-  ↓
-Human Approval
-  ↓
-Resume
-  ↓
-CRM Update
-
-Persistent Storage:
-
-Railway Persistent Volume
-        │
-        ├── CRM SQLite
-        ├── Session SQLite
-        └── Pending Approval State
+React / Vercel
+      ↓
+FastAPI / Railway
+      ↓
+Sales Manager
+   ↙          ↘
+CRM Specialist   Research Specialist
+      ↓
+Guardrails + Human Approval
+      ↓
+Persistent SQLite Storage
 ```
 
-A visual architecture diagram will be added separately.
+For the full system architecture, including the durable HITL and RunState resume flow:
+
+**[View Full Architecture →](./docs/architecture.md)**
 
 ---
 

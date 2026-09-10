@@ -480,61 +480,22 @@ Sidebar 使用 Smooth Scroll 在同一頁不同 Section 之間導航。
 ## Architecture
 
 ```text
-┌─────────────────────────────┐
-│        React + Vite         │
-│      Vercel Frontend        │
-└──────────────┬──────────────┘
-               │
-               │ REST API
-               ▼
-┌─────────────────────────────┐
-│          FastAPI            │
-│      Railway Backend        │
-└──────────────┬──────────────┘
-               │
-               ▼
-       ┌───────────────┐
-       │ Sales Manager │
-       │ Orchestrator  │
-       └───────┬───────┘
-               │
-       ┌───────┴────────┐
-       ▼                ▼
-┌─────────────┐   ┌─────────────┐
-│ CRM         │   │ Research    │
-│ Specialist  │   │ Specialist  │
-└──────┬──────┘   └──────┬──────┘
-       │                  │
-       └────────┬─────────┘
-                ▼
-      Daily Pipeline Review
-
-Protected CRM Write Path：
-
-Agent
-  ↓
-Tool Guardrail
-  ↓
-HITL Approval
-  ↓
-Persist RunState
-  ↓
-Human Approval
-  ↓
-Resume Agent
-  ↓
-CRM Update
-
-Persistent Storage：
-
-Railway Persistent Volume
-        │
-        ├── CRM SQLite
-        ├── Session SQLite
-        └── Pending Approval State
+React / Vercel
+      ↓
+FastAPI / Railway
+      ↓
+Sales Manager
+   ↙          ↘
+CRM Specialist   Research Specialist
+      ↓
+Guardrails + Human Approval
+      ↓
+Persistent SQLite Storage
 ```
 
-後續會另外加入正式的 Architecture Diagram。
+完整架構、Durable HITL 與 RunState Resume 流程：
+
+**[查看完整系統架構 →](./docs/architecture.md)**
 
 ---
 
