@@ -20,10 +20,24 @@ function App() {
   const [pendingError, setPendingError] = useState("");
   const [approvingRunId, setApprovingRunId] = useState(null);
   const [approvalMessage, setApprovalMessage] = useState("");
+  const [activeSection, setActiveSection] = useState("overview");
 
   useEffect(() => {
     loadPendingApprovals();
   }, []);
+
+  function scrollToSection(sectionId) {
+    setActiveSection(sectionId);
+
+    const section = document.getElementById(sectionId);
+
+    if (section) {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }
 
   async function generateDailyReview() {
     try {
@@ -172,23 +186,65 @@ function App() {
         </div>
 
         <nav>
-          <button className="nav-item active">
+          <button
+            type="button"
+            className={
+              activeSection === "overview"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => scrollToSection("overview")}
+          >
             Overview
           </button>
 
-          <button className="nav-item">
+          <button
+            type="button"
+            className={
+              activeSection === "pipeline"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => scrollToSection("pipeline")}
+          >
             Pipeline
           </button>
 
-          <button className="nav-item">
+          <button
+            type="button"
+            className={
+              activeSection === "ai-review"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => scrollToSection("ai-review")}
+          >
             AI Review
           </button>
 
-          <button className="nav-item">
+          <button
+            type="button"
+            className={
+              activeSection === "approvals"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => scrollToSection("approvals")}
+          >
             Approvals
           </button>
 
-          <button className="nav-item">
+          <button
+            type="button"
+            className={
+              activeSection === "agent-activity"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() =>
+              scrollToSection("agent-activity")
+            }
+          >
             Agent Activity
           </button>
         </nav>
@@ -199,7 +255,7 @@ function App() {
       </aside>
 
       <main className="main">
-        <header className="header">
+        <header className="header" id="overview">
           <div>
             <p className="eyebrow">
               SALES OPERATIONS
@@ -270,7 +326,7 @@ function App() {
           </div>
         </section>
 
-        <section className="approval-panel">
+        <section className="approval-panel" id="approvals">
           <div className="approval-header">
             <div>
               <p className="eyebrow">
@@ -415,7 +471,7 @@ function App() {
         </section>
 
         <section className="content-grid">
-          <div className="panel">
+          <div className="panel" id="pipeline">
             <p className="eyebrow">
               TODAY'S PIPELINE
             </p>
@@ -461,7 +517,7 @@ function App() {
             )}
           </div>
 
-          <div className="panel">
+          <div className="panel" id="agent-activity">
             <p className="eyebrow">
               MULTI-AGENT WORKFLOW
             </p>
@@ -535,7 +591,7 @@ function App() {
           </div>
         </section>
 
-        <section className="detail-grid">
+        <section className="detail-grid" id="ai-review">
           <div className="panel">
             <p className="eyebrow">
               EXTERNAL INTELLIGENCE
