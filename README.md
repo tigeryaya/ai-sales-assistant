@@ -2,190 +2,135 @@
 
 [English](./README.md) | [繁體中文](./README.zh-TW.md)
 
-A production-deployed **multi-agent sales operations assistant** that combines CRM data, external company research, lead prioritization, AI recommendations, and durable human approval workflows in a single dashboard.
+A production-deployed **multi-agent sales operations assistant** that combines structured CRM data, deterministic lead scoring, external company research, AI recommendations, and durable human-in-the-loop workflows.
 
-The project demonstrates how AI agents can assist sales operations while keeping important CRM write actions under **human-in-the-loop control**.
+> **Design goal:** automate where AI adds value, keep deterministic logic where consistency matters, and require human oversight for higher-risk actions.
 
 ## Live Demo
 
-**Frontend**
+- **Frontend:** https://ai-sales-assistant-teal.vercel.app
+- **Backend API:** https://ai-sales-assistant-production-6111.up.railway.app
+- **Swagger Docs:** https://ai-sales-assistant-production-6111.up.railway.app/docs
 
-https://ai-sales-assistant-teal.vercel.app
-
-**Backend API**
-
-https://ai-sales-assistant-production-6111.up.railway.app
-
-**API Documentation**
-
-https://ai-sales-assistant-production-6111.up.railway.app/docs
+> The public deployment runs in **safe demo mode**. Costly AI endpoints are protected, and sensitive CRM write/approval execution is restricted for anonymous visitors.
 
 ---
 
-## Overview
+## Why This Project Matters
 
-AI Sales Copilot helps a sales team review its pipeline by combining:
+This project goes beyond a basic chatbot or tool-calling demo. It demonstrates an end-to-end AI application with:
 
-- Structured CRM data
-- Deterministic lead scoring
-- External company research
-- Multi-agent orchestration
-- AI-generated recommendations
-- Human approval for sensitive CRM writes
-- Persistent conversation and approval state
-
-Instead of giving an AI agent unrestricted access to modify CRM data, the system separates:
-
-```text
-AI reasoning
-    ↓
-Tool validation
-    ↓
-Human approval
-    ↓
-CRM execution
-```
-
-This makes the project closer to a real business workflow than a simple chatbot or single tool-calling demo.
+- **Multi-agent orchestration** using the OpenAI Agents SDK
+- Structured CRM data + deterministic lead scoring
+- External research separated from internal CRM facts
+- Tool guardrails for protected actions
+- Durable human-in-the-loop approval workflows
+- RunState persistence and resume after interruption
+- Session-isolated conversation memory
+- Cloudflare Turnstile bot protection
+- Server-side AI response caching
+- Daily app-level AI usage quotas
+- Concurrency controls for costly workflows
+- Persistent SQLite storage on Railway Volume
+- Production deployment on **Vercel + Railway**
 
 ---
 
-## Core Features
-
-### 1. Multi-Agent Sales Workflow
-
-The backend uses the **OpenAI Agents SDK** to coordinate multiple AI roles.
-
-Current workflow:
+## Architecture
 
 ```text
-Sales Manager
-     │
-     ├── CRM Specialist
-     │
-     └── Research Specialist
-     │
-     ▼
-Daily Pipeline Review
+React / Vercel
+      │
+      │  Cloudflare Turnstile
+      ▼
+FastAPI / Railway
+      │
+      ├── Abuse & Cost Controls
+      │     ├── Turnstile verification
+      │     ├── Response cache
+      │     ├── Daily usage quotas
+      │     └── Concurrency locks
+      │
+      ▼
+Sales Manager Agent
+      │
+      ├── CRM Specialist
+      │     ├── Structured CRM data
+      │     └── Deterministic lead scoring
+      │
+      └── Research Specialist
+            └── Public company research
+
+Protected CRM write
+      ↓
+Tool Guardrail
+      ↓
+Human Approval
+      ↓
+RunState Persisted / Restored
+      ↓
+CRM Write
+
+Railway Persistent Volume (/data)
+      ├── crm.db
+      ├── sales_sessions.db
+      └── usage.db
 ```
 
-### Sales Manager
+**[View Full Architecture →](./docs/architecture.md)**
 
-Acts as the orchestrator.
+---
 
-It combines CRM information and external research into a final sales pipeline review.
+## Core Workflow
+
+### Daily Pipeline Review
+
+The dashboard generates:
+
+- Top leads
+- Deterministic lead scores
+- CRM-based prioritization reasons
+- External buying signals
+- Sales interpretations
+- Recommended actions
+- Reliability warnings
+- Agent activity
+
+The Sales Manager orchestrates the workflow rather than handling every task itself.
 
 ### CRM Specialist
 
-Works with structured CRM information such as:
+Works with structured internal CRM fields such as customer, company, budget, interest, lead status, and lead score.
 
-- Customer
-- Company
-- Budget
-- Interest
-- Lead status
-- Lead score
-
-### Research Specialist
-
-Researches external company signals that may be relevant to sales opportunities.
-
-External information is kept separate from internal CRM facts to reduce the risk of incorrectly treating public information as customer data.
-
----
-
-## Daily Pipeline Review
-
-The dashboard can generate a daily pipeline review containing:
-
-- Top Leads
-- Lead scores
-- CRM-based prioritization reasons
-- External Buying Signals
-- Sales interpretations
-- Recommended Actions
-- Reliability warnings
-- Agent execution status
-
-The current demo baseline includes:
-
-| Customer | Company | Status | Score |
-|---|---|---|---:|
-| Kevin Chen | NovaTech | qualified | 60 |
-| Sarah Lin | Cloudflare | new | 40 |
-| Michael Wu | ServiceNow | new | 40 |
-| Emily Chen | Snowflake | new | 25 |
-
-**NovaTech is intentionally synthetic demo data.**
-
-The system does not treat online information about companies with the same name as verified information about Kevin Chen's company.
-
----
-
-## Lead Scoring
-
-Lead scores are calculated from structured CRM data rather than being generated entirely by an LLM.
-
-Inputs include information such as:
-
-- Budget
-- Interest level
-- Lead status
-
-This creates a clearer separation between deterministic business logic and AI-generated reasoning.
+Lead scoring remains deterministic:
 
 ```text
 CRM Data
    ↓
-Lead Scoring Logic
+Deterministic Scoring
    ↓
 Prioritized Leads
    ↓
 AI Interpretation
 ```
 
----
+### Research Specialist
 
-## External Buying Signals
+Researches public company signals that may be relevant to sales opportunities.
 
-The Research Specialist can gather external signals related to real companies in the CRM.
-
-The dashboard separates:
+The system intentionally keeps:
 
 ```text
-Verified External Fact
-        ↓
-Sales Interpretation
+Internal CRM Facts ≠ External Public Research
 ```
 
-This distinction is intentional.
-
-The AI is allowed to interpret a verified external signal, but the interpretation is not presented as a verified fact.
+External information can support recommendations, but it is not silently treated as verified CRM data.
 
 ---
 
-## Recommended Actions
+## Durable Human-in-the-Loop
 
-After CRM analysis and external research are complete, the Sales Manager generates prioritized next actions.
-
-Examples may include:
-
-- Follow up with a high-priority lead
-- Investigate a buying signal
-- Prepare a proposal
-- Review a qualified opportunity
-
-The recommendations are advisory.
-
-Sensitive CRM write actions still pass through the approval workflow.
-
----
-
-## Durable Human-in-the-Loop Approval
-
-One of the main features of this project is a persistent human approval workflow.
-
-When an AI agent requests a protected CRM write:
+Protected CRM writes do not execute immediately.
 
 ```text
 Agent requests CRM change
@@ -196,66 +141,40 @@ Approval Required
         ↓
 RunState persisted
         ↓
-Pending Approval shown in dashboard
+Pending approval stored
         ↓
-Human clicks Approve
+Human approves
         ↓
 RunState restored
         ↓
-Agent execution resumes
+Agent resumes
         ↓
 CRM write executes
 ```
 
-The interrupted run is not stored only in application memory.
+The approval state is stored in SQLite instead of existing only in process memory, so pending workflows can survive backend redeployments.
 
-Pending approval state is persisted in SQLite, allowing it to survive backend redeployments and process restarts.
+### Public Demo Safety
 
----
-
-## Durable RunState
-
-When an agent execution is interrupted for approval, its state is stored so the workflow can continue later.
-
-Production testing confirmed the following sequence:
-
-```text
-Create pending approval
-        ↓
-Railway redeploy
-        ↓
-Pending approval still exists
-        ↓
-Restore RunState
-        ↓
-Approve from Vercel dashboard
-        ↓
-Resume agent execution
-        ↓
-CRM record updated
-        ↓
-Pending approval removed
-```
-
-This allows the approval workflow to survive infrastructure restarts instead of losing its state.
+The public deployment intentionally restricts approval/write execution so anonymous visitors cannot mutate CRM state. The full HITL resume/write flow is available in controlled private/local testing.
 
 ---
 
 ## Tool Guardrails
 
-CRM-changing tools are protected by tool-level guardrails.
+Human approval is not the only control layer.
 
-The current demo policy includes behavior such as:
+Example policy:
 
 ```text
 proposal
-→ can proceed to human approval
+→ may proceed to human approval
 
 won / lost
-→ blocked by the configured guardrail before approval
+→ blocked by tool guardrail before approval
 ```
 
-The architecture therefore contains two separate control layers:
+This creates two separate safeguards:
 
 ```text
 Agent Decision
@@ -267,126 +186,92 @@ Human Approval
 CRM Write
 ```
 
-The human approval layer is not used as a replacement for tool validation.
-
-Both layers serve different purposes.
-
 ---
 
 ## Conversation Memory
 
-The application supports persistent agent sessions using SQLite-backed session storage.
+The application supports SQLite-backed conversation sessions.
 
-Requests can include a `session_id`.
-
-Different sessions maintain independent conversation histories.
-
-Example:
+Requests include a `session_id`, and separate sessions maintain independent conversation histories.
 
 ```text
 kevin-session-001
+Previous context: Kevin Chen has a budget of 500000
 
-Previous context:
-Kevin Chen has a budget of 500000
-
-Question:
-"What is his budget?"
-
+Question: "What is his budget?"
 → 500000
 ```
 
-A new session does not automatically inherit that context:
-
-```text
-fresh-session-001
-
-Question:
-"What is his budget?"
-
-→ No customer context available
-```
-
-This demonstrates session isolation between separate conversations.
+A fresh session does not automatically inherit that context.
 
 ---
 
-## Pending Approval Dashboard
+## Abuse & Cost Controls
 
-The React frontend can directly display pending AI actions.
+Because the demo is publicly accessible, expensive AI endpoints include multiple protection layers.
 
-A pending approval shows information such as:
+### Cloudflare Turnstile
+
+The frontend obtains a Turnstile token and FastAPI performs server-side verification before expensive AI work is allowed.
+
+### Response Cache
+
+Daily pipeline reviews are cached for a configurable period. Repeated requests during the cache window return the stored result instead of launching another multi-agent run.
+
+### Daily AI Quotas
+
+Configurable app-level counters include:
 
 ```text
-Customer
-Company
-Current CRM Status
-Requested CRM Status
-Tool
-Durable RunState
+DAILY_REVIEW_LIMIT
+AGENT_TASK_DAILY_LIMIT
 ```
 
-The user can approve the action directly from the dashboard.
+When a limit is reached, the API returns HTTP `429` instead of spending additional model resources.
 
-After approval, the frontend verifies the resulting CRM state and refreshes the pending approval list.
+### Concurrency Controls
+
+Async locks prevent bursts of simultaneous requests from launching duplicate expensive workflows in the same process.
+
+### Persistent Protection State
+
+Quota and cache state are stored in:
+
+```text
+/data/usage.db
+```
+
+so protection state survives Railway redeployments.
 
 ---
 
-## Agent Activity
+## Production Persistence
 
-The dashboard visualizes the current multi-agent workflow.
+Railway mounts a Persistent Volume at:
 
 ```text
-Sales Manager
-     ↓
-CRM Specialist
-Research Specialist
-     ↓
-Recommendation
+/data
 ```
 
-Specialists change from `Waiting` to `Completed` after execution.
+The application stores:
 
-This makes the internal orchestration easier to understand during a live demo.
+```text
+/data/crm.db
+/data/sales_sessions.db
+/data/usage.db
+```
+
+These databases persist CRM records, pending approvals, interrupted RunState data, conversation sessions, usage counters, and cached review responses.
 
 ---
 
-## Dashboard Navigation
+## Synthetic Demo Data
 
-The application uses a single-page React dashboard.
+The demo includes synthetic CRM records.
 
-Sidebar sections include:
+**NovaTech is intentionally synthetic demo data.**
 
-- Overview
-- Pipeline
-- AI Review
-- Approvals
-- Agent Activity
-
-Navigation uses smooth section scrolling without React Router or separate pages.
-
-The project intentionally keeps the frontend simple so the focus remains on the AI workflow and reliability mechanisms.
-
----
-
-## Architecture
-
-```text
-React / Vercel
-      ↓
-FastAPI / Railway
-      ↓
-Sales Manager
-   ↙          ↘
-CRM Specialist   Research Specialist
-      ↓
-Guardrails + Human Approval
-      ↓
-Persistent SQLite Storage
-```
-
-For the full system architecture, including the durable HITL and RunState resume flow:
-
-**[View Full Architecture →](./docs/architecture.md)**
+The system avoids treating public information about a real company with the same name as verified information about the synthetic CRM account.
 
 ---
 
@@ -400,7 +285,8 @@ For the full system architecture, including the durable HITL and RunState resume
 - Tool guardrails
 - Human-in-the-loop approval
 - RunState persistence
-- SQLite-backed conversation sessions
+- Web research tools
+- SQLite-backed agent sessions
 
 ### Backend
 
@@ -416,19 +302,18 @@ For the full system architecture, including the durable HITL and RunState resume
 - JavaScript
 - Vite
 - Fetch API
+- Cloudflare Turnstile
 
 ### Deployment
 
+- Vercel
 - Railway
 - Railway Persistent Volume
-- Vercel
 - GitHub
 
 ---
 
 ## API Overview
-
-Main endpoints include:
 
 ```text
 GET  /health
@@ -445,65 +330,111 @@ GET  /agent/pending
 POST /agent/approve
 ```
 
-Interactive API documentation is available through FastAPI Swagger UI:
+Interactive API documentation:
 
 https://ai-sales-assistant-production-6111.up.railway.app/docs
 
 ---
 
-## Production Persistence
+## Local Development
 
-The Railway deployment uses a Persistent Volume.
+### Backend
 
-Production environment paths include:
-
-```text
-CRM_DB_PATH=/data/crm.db
-
-SALES_SESSION_DB_PATH=/data/sales_sessions.db
+```bash
+python -m venv .venv
 ```
 
-Persistent storage is used for:
+Windows:
 
-- CRM records
-- Agent conversation sessions
-- Pending human approvals
-- Interrupted workflow state
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --reload
+```
 
-Persistence was tested across Railway redeployments.
+Backend: `http://127.0.0.1:8000`  
+Swagger: `http://127.0.0.1:8000/docs`
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend: `http://localhost:5173`
+
+### Environment Variables
+
+Backend secrets belong in local `.env` or deployment variables and must not be committed.
+
+```text
+OPENAI_API_KEY
+PUBLIC_DEMO_MODE
+TURNSTILE_ENABLED
+TURNSTILE_SECRET_KEY
+DAILY_REVIEW_LIMIT
+DAILY_REVIEW_CACHE_SECONDS
+AGENT_TASK_DAILY_LIMIT
+DATA_DIR
+```
+
+Frontend build-time variables:
+
+```text
+VITE_API_BASE_URL
+VITE_TURNSTILE_SITE_KEY
+```
 
 ---
 
 ## Reliability Design
 
-This project intentionally avoids giving one AI agent unrestricted control over the entire workflow.
+Current reliability mechanisms include:
 
-Reliability mechanisms currently include:
-
-- Structured CRM data
 - Deterministic lead scoring
-- Specialized agent responsibilities
-- Separation of CRM facts and external research
-- Tool-level guardrails
+- Agent responsibility separation
+- CRM / external research separation
+- Tool guardrails
 - Human approval for protected writes
-- Persistent approval state
-- Agent RunState restoration
-- Conversation session isolation
+- Durable pending state
+- RunState restoration
+- Session isolation
 - Synthetic-data protection
-- Reliability warnings
 - Post-approval CRM verification
+- Persistent storage
+- Turnstile verification
+- Server-side response caching
+- Daily usage quotas
+- Concurrency controls
+- Public demo restrictions
 
-The goal is not maximum autonomy.
+> **The goal is controlled automation, not maximum autonomy.**
 
-The goal is to determine:
+---
 
-> **Which tasks should be automated, which actions need deterministic controls, and where a human should remain in the loop?**
+## Current Scope
+
+This project is intentionally focused on a reliable, explainable, end-to-end AI workflow rather than a full enterprise CRM platform.
+
+Potential future extensions:
+
+- Authentication and role-based access control
+- PostgreSQL
+- Real CRM integrations
+- Agent observability
+- Automated evaluation pipelines
+- Model routing by task complexity
+- Scheduled pipeline reviews
+- Approval history / audit logs
+- Broader automated testing
 
 ---
 
 ## Why I Built This
 
-Many AI agent demos stop after:
+Many AI agent demos stop at:
 
 ```text
 Prompt
@@ -512,93 +443,15 @@ Prompt
 → Answer
 ```
 
-I wanted to explore what happens after that point.
-
-A business AI system also needs to answer questions such as:
+This project explores what comes next:
 
 - How should multiple agents divide responsibilities?
-- Which logic should remain deterministic?
-- How should agents interact with structured business data?
-- What happens when an AI wants to modify important data?
-- Should every requested tool action be allowed?
-- How can a human approve an AI action?
-- What happens if the backend restarts while approval is pending?
-- How can interrupted AI workflows resume safely?
-- How should conversation sessions remain isolated?
-- How should internal CRM facts be separated from external research?
-
-AI Sales Copilot was built around these problems.
-
----
-
-## Production-Tested Workflows
-
-The current deployment has been tested for:
-
-- Frontend-to-backend production integration
-- CRM persistence
-- Daily pipeline review
-- Lead scoring
-- Multi-agent orchestration
-- CRM specialist execution
-- Research specialist execution
-- External buying signals
-- Recommended actions
-- Reliability warnings
-- Synthetic company protection
-- Tool guardrails
-- Human-in-the-loop approval
-- Durable pending approvals
-- Railway redeployment persistence
-- RunState restoration
-- Agent resume after approval
-- CRM write after approval
-- Pending approval cleanup
-- Multi-session isolation
-- Sidebar section navigation
-
----
-
-## Current Scope
-
-This project is intentionally focused on completing a reliable end-to-end AI workflow.
-
-The current version does **not** attempt to be a full enterprise CRM platform.
-
-Possible future improvements include:
-
-- Authentication
-- Role-based access control
-- PostgreSQL
-- Real CRM integrations
-- Agent observability
-- Automated evaluation pipelines
-- Model routing based on task complexity
-- Scheduled pipeline reviews
-- Approval history and audit logs
-- Expanded automated testing
-
-These features are intentionally outside the current demo scope.
-
----
-
-## Project Goal
-
-AI Sales Copilot is designed as a portfolio project demonstrating applied AI system design rather than only prompt engineering.
-
-The project focuses on the intersection of:
-
-```text
-AI Agents
-+
-Business Workflows
-+
-Structured Data
-+
-Human Oversight
-+
-Production Deployment
-```
+- Which decisions should remain deterministic?
+- How should agents work with structured business data?
+- What happens when AI wants to modify important data?
+- How should interrupted workflows resume?
+- How should separate conversations remain isolated?
+- How do you expose an AI demo publicly without leaving expensive endpoints unprotected?
 
 ---
 
@@ -609,6 +462,4 @@ Production Deployment
 M.S. Business Analytics  
 B.S. Electrical Engineering
 
-Focus areas:
-
-AI Solutions · Technical Product Management · Applied AI · Agent Systems
+**AI Solutions · Technical Product Management · Applied AI · Agent Systems**

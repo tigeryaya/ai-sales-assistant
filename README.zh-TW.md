@@ -2,321 +2,177 @@
 
 [English](./README.md) | [繁體中文](./README.zh-TW.md)
 
-一套已實際部署的 **Multi-Agent AI Sales Operations Assistant**。
+一套已實際部署的 **Multi-Agent AI Sales Operations Assistant**，整合 CRM 結構化資料、Deterministic Lead Scoring、外部公司研究、AI 銷售建議，以及可持久化的 Human-in-the-Loop 工作流程。
 
-系統整合 CRM 結構化資料、Lead Scoring、外部公司研究、AI 銷售建議，以及可持久化的 Human-in-the-Loop 審批流程，並透過單一 Dashboard 提供操作與展示。
-
-這個專案的重點不只是讓 AI Agent 呼叫工具，而是處理一個更接近實際企業 AI 系統的問題：
-
-> **哪些工作可以交給 AI 自動完成，哪些操作需要程式規則限制，以及哪些重要決策必須保留人工確認？**
+> **設計目標：** AI 用在它有價值的地方、Deterministic Logic 用在需要穩定性的地方，而高風險行為保留 Human Oversight。
 
 ## 線上 Demo
 
-**Frontend**
+- **Frontend:** https://ai-sales-assistant-teal.vercel.app
+- **Backend API:** https://ai-sales-assistant-production-6111.up.railway.app
+- **Swagger Docs:** https://ai-sales-assistant-production-6111.up.railway.app/docs
 
-https://ai-sales-assistant-teal.vercel.app
-
-**Backend API**
-
-https://ai-sales-assistant-production-6111.up.railway.app
-
-**API Documentation**
-
-https://ai-sales-assistant-production-6111.up.railway.app/docs
+> 公開部署使用 **Safe Demo Mode**。高成本 AI endpoint 有額外保護，敏感 CRM 寫入與 Approval Execution 也限制匿名使用者操作。
 
 ---
 
-## 專案概述
+## 這個作品展示什麼
 
-AI Sales Copilot 協助業務團隊整理每日 Sales Pipeline。
+這不只是 Chatbot 或單純 Tool Calling Demo，而是一套完整的 AI Application Workflow：
 
-系統結合：
+- 使用 **OpenAI Agents SDK** 建立 Multi-Agent Orchestration
+- CRM 結構化資料與 Deterministic Lead Scoring
+- External Research 與 Internal CRM Facts 分離
+- Tool Guardrails
+- Durable Human-in-the-Loop
+- RunState Persistence / Restore / Resume
+- Session-isolated Conversation Memory
+- Cloudflare Turnstile Bot Protection
+- Server-side AI Response Cache
+- App-level Daily AI Usage Quotas
+- Concurrency Controls
+- Railway Persistent Volume
+- **Vercel + Railway** Production Deployment
 
-- CRM 結構化資料
-- Deterministic Lead Scoring
-- 外部公司研究
-- Multi-Agent 協作
-- AI 銷售建議
-- Human-in-the-Loop
-- Agent RunState persistence
-- Conversation Memory
-- Production Deployment
+---
 
-系統並不直接讓 AI 擁有無限制修改 CRM 的權限。
-
-重要寫入操作會經過：
+## 系統架構
 
 ```text
-AI 判斷
-   ↓
+React / Vercel
+      │
+      │  Cloudflare Turnstile
+      ▼
+FastAPI / Railway
+      │
+      ├── Abuse & Cost Controls
+      │     ├── Turnstile verification
+      │     ├── Response cache
+      │     ├── Daily usage quotas
+      │     └── Concurrency locks
+      │
+      ▼
+Sales Manager Agent
+      │
+      ├── CRM Specialist
+      │     ├── Structured CRM data
+      │     └── Deterministic lead scoring
+      │
+      └── Research Specialist
+            └── Public company research
+
+Protected CRM write
+      ↓
 Tool Guardrail
-   ↓
-人工審批
-   ↓
-CRM 寫入
+      ↓
+Human Approval
+      ↓
+RunState Persisted / Restored
+      ↓
+CRM Write
+
+Railway Persistent Volume (/data)
+      ├── crm.db
+      ├── sales_sessions.db
+      └── usage.db
 ```
 
-因此這個作品的核心不是「讓 Agent 越自主越好」，而是嘗試建立一個比較可靠、可控、可恢復的 AI 工作流程。
+**[查看 Full Architecture →](./docs/architecture.md)**
 
 ---
 
-## 核心功能
+## 核心流程
 
-### 1. Multi-Agent Sales Workflow
+### Daily Pipeline Review
 
-Backend 使用 **OpenAI Agents SDK** 建立多 Agent 協作流程。
-
-目前包含：
-
-```text
-Sales Manager
-     │
-     ├── CRM Specialist
-     │
-     └── Research Specialist
-     │
-     ▼
-Daily Pipeline Review
-```
-
-### Sales Manager
-
-擔任 Orchestrator。
-
-負責整合 CRM Specialist 與 Research Specialist 的結果，產生每日 Pipeline Review。
-
-### CRM Specialist
-
-負責處理 CRM 內的結構化資料，例如：
-
-- Customer
-- Company
-- Budget
-- Interest
-- Lead Status
-- Lead Score
-
-### Research Specialist
-
-負責研究 CRM 公司相關的外部公開訊號，提供 Sales Intelligence。
-
-系統刻意將：
-
-```text
-Internal CRM Facts
-```
-
-與：
-
-```text
-External Research
-```
-
-分開處理，避免 AI 將網路上的外部資訊錯誤當成 CRM 內部事實。
-
----
-
-## Daily Pipeline Review
-
-Dashboard 可以產生每日 Sales Pipeline Review。
-
-內容包含：
+Dashboard 可以產生：
 
 - Top Leads
-- Lead Score
-- CRM-based Reason
-- Buying Signals
-- Sales Interpretation
+- Deterministic Lead Scores
+- CRM-based Prioritization Reasons
+- External Buying Signals
+- Sales Interpretations
 - Recommended Actions
 - Reliability Warnings
 - Agent Activity
 
-目前固定 Demo baseline：
+Sales Manager 負責 Orchestration，而不是讓單一 Agent 包辦所有工作。
 
-| Customer | Company | Status | Score |
-|---|---|---|---:|
-| Kevin Chen | NovaTech | qualified | 60 |
-| Sarah Lin | Cloudflare | new | 40 |
-| Michael Wu | ServiceNow | new | 40 |
-| Emily Chen | Snowflake | new | 25 |
+### CRM Specialist
 
-其中：
+CRM Specialist 使用 CRM 的結構化欄位，例如 Customer、Company、Budget、Interest、Lead Status 與 Lead Score。
 
-**NovaTech 為刻意建立的 Synthetic Demo Data。**
-
-系統不會因為網路上存在同名 NovaTech 公司，就把那些公開資訊直接當成 Kevin Chen 所屬公司的真實資料。
-
----
-
-## Lead Scoring
-
-Lead Score 並不是完全交給 LLM 自由判斷。
-
-系統使用 CRM 中的結構化資料執行 scoring logic。
-
-例如：
-
-- Budget
-- Interest
-- Lead Status
-
-流程：
+Lead Score 由 deterministic business logic 計算：
 
 ```text
 CRM Data
    ↓
-Lead Scoring Logic
+Deterministic Scoring
    ↓
 Prioritized Leads
    ↓
 AI Interpretation
 ```
 
-這樣可以把：
+### Research Specialist
+
+Research Specialist 研究與 CRM Company 相關的公開資訊與 buying signals。
+
+系統刻意分離：
 
 ```text
-Deterministic Business Logic
+Internal CRM Facts ≠ External Public Research
 ```
 
-與：
-
-```text
-LLM Reasoning
-```
-
-分開。
-
-對需要穩定數值邏輯的部分，不必全部交給 AI 生成。
-
----
-
-## External Buying Signals
-
-Research Specialist 可以研究真實公司的外部資訊，尋找可能與銷售機會相關的訊號。
-
-Dashboard 刻意分成：
-
-```text
-Verified External Fact
-        ↓
-Sales Interpretation
-```
-
-也就是：
-
-**外部事實**與**AI 的商業解讀**不是同一件事。
-
-AI 可以根據已取得的資訊進行銷售判斷，但不會把自己的推論標示成已驗證事實。
-
----
-
-## Recommended Actions
-
-當 CRM 分析與外部研究完成後，Sales Manager 會產生下一步建議。
-
-例如：
-
-- 優先聯繫高分 Lead
-- 針對 Buying Signal 進一步研究
-- 準備 Proposal
-- Review Qualified Opportunity
-
-這些 Recommended Actions 屬於 AI 建議。
-
-如果後續涉及敏感 CRM 寫入，仍然必須經過審批流程。
+外部資訊可以支援 AI 判斷，但不會被默認成 CRM 已驗證事實。
 
 ---
 
 ## Durable Human-in-the-Loop
 
-這是目前專案最重要的功能之一。
-
-當 AI Agent 想執行受保護的 CRM 寫入時：
+受保護的 CRM 寫入不會直接執行。
 
 ```text
 Agent 要求修改 CRM
         ↓
 Tool Guardrail
         ↓
-需要 Human Approval
+Approval Required
         ↓
-RunState 持久化
+RunState Persisted
         ↓
-Dashboard 顯示 Pending Approval
+Pending Approval 儲存
         ↓
-Human 點擊 Approve
+Human Approves
         ↓
-Restore RunState
+RunState Restored
         ↓
-Agent 繼續執行
+Agent Resumes
         ↓
-CRM 寫入
+CRM Write
 ```
 
-這裡的關鍵在於：
+Pending Approval 並不是只存在 Python process memory，而是持久化到 SQLite，因此可以跨 Railway Redeploy 保留。
 
-**Pending Approval 並不是只存在 Python 記憶體裡。**
+### Public Demo Safety
 
-系統將相關狀態持久化到 SQLite，因此就算 Backend 發生 redeploy 或 process restart，也不會直接失去尚未完成的審批流程。
-
----
-
-## Durable RunState
-
-當 Agent 因為等待人工確認而被 interrupt 時，系統會保存執行狀態。
-
-Production 已實際測試：
-
-```text
-建立 Pending Approval
-        ↓
-Railway Redeploy
-        ↓
-Pending Approval 仍存在
-        ↓
-Restore RunState
-        ↓
-從 Vercel Dashboard Approve
-        ↓
-Resume Agent
-        ↓
-CRM 更新成功
-        ↓
-Pending Approval 自動移除
-```
-
-這表示 AI workflow 不需要假設：
-
-> 「Agent 開始後一定要在同一次 process 裡跑完。」
-
-而是可以：
-
-```text
-Pause
-→ Persist
-→ Restore
-→ Resume
-```
+公開網站刻意限制 Approval / CRM Write Execution，避免匿名使用者直接修改 Demo CRM。完整 HITL Resume / Write 流程保留在 Private / Local Controlled Demo 中展示。
 
 ---
 
 ## Tool Guardrails
 
-CRM 修改工具除了 Human Approval 外，還有 Tool Guardrail。
-
-目前 Demo Policy 例如：
+Human Approval 不是唯一的控制層。
 
 ```text
 proposal
-→ 可以通過 Guardrail
-→ 進入 Human Approval
+→ 可以進入 Human Approval
 
 won / lost
-→ 在 Approval 之前
-→ 就會被 Guardrail 阻擋
+→ 在 Approval 前由 Tool Guardrail 阻擋
 ```
 
-因此目前架構包含兩層不同用途的控制：
+因此流程是：
 
 ```text
 Agent Decision
@@ -328,180 +184,98 @@ Human Approval
 CRM Write
 ```
 
-Human Approval 並不是拿來取代程式規則。
-
-Guardrail 與 Human Approval 各自負責不同的安全控制。
-
 ---
 
 ## Conversation Memory
 
-系統支援 SQLite-backed conversation session。
+系統支援 SQLite-backed Conversation Sessions。
 
-API 可以傳入：
-
-```text
-session_id
-```
-
-不同 session 擁有獨立 conversation history。
-
-例如：
+API 可以傳入 `session_id`，不同 session 擁有獨立 conversation history。
 
 ```text
 kevin-session-001
+Previous context: Kevin Chen has a budget of 500000
+
+Question: "What is his budget?"
+→ 500000
 ```
 
-之前已討論：
-
-```text
-Kevin Chen
-Budget = 500000
-```
-
-之後同一個 session 問：
-
-```text
-What is his budget?
-```
-
-系統可以回答：
-
-```text
-500000
-```
-
-但如果換成：
-
-```text
-fresh-session-001
-```
-
-直接問：
-
-```text
-What is his budget?
-```
-
-系統不會自動取得 Kevin 的 context。
-
-這代表不同 session 之間可以維持 conversation isolation。
+Fresh session 不會自動繼承 Kevin 的 context。
 
 ---
 
-## Pending Approval Dashboard
+## Abuse & Cost Controls
 
-Frontend 可以直接顯示目前等待人工確認的 AI action。
+因為作品有公開網址，所以高成本 AI endpoint 不能毫無限制地暴露在網路上。
 
-Approval Card 會呈現例如：
+### Cloudflare Turnstile
 
-```text
-Customer
-Company
-Current CRM Status
-Requested CRM Status
-Tool
-Durable RunState
-```
+Frontend 取得 Turnstile token，FastAPI backend 執行 server-side verification，驗證成功後才允許進入昂貴 AI workflow。
 
-使用者可以直接從 Dashboard 點擊：
+### Response Cache
 
-```text
-Approve
-```
+Daily Pipeline Review 支援 server-side cache。在 cache window 內重複請求時，直接回傳已產生結果，不會重新跑一次 multi-agent workflow。
 
-Approve 成功後：
+### Daily AI Quotas
+
+Backend 維護 app-level daily counters：
 
 ```text
-Restore RunState
-        ↓
-Resume Agent
-        ↓
-Execute CRM Tool
-        ↓
-Update CRM
-        ↓
-Refresh Pending List
+DAILY_REVIEW_LIMIT
+AGENT_TASK_DAILY_LIMIT
 ```
 
-Frontend 也會再次讀取 CRM 狀態，確認實際更新結果。
+Quota 用完後，API 回傳 HTTP `429`，避免繼續消耗 model resources。
+
+### Concurrency Controls
+
+Async lock 避免短時間大量 simultaneous requests 同時啟動重複的昂貴 AI workflow。
+
+### Persistent Usage State
+
+Quota / Cache 狀態持久化於：
+
+```text
+/data/usage.db
+```
+
+所以 Railway redeploy 後 protection state 仍可以保留。
 
 ---
 
-## Agent Activity
+## Production Persistence
 
-Dashboard 可以顯示 Multi-Agent workflow 的執行狀態。
-
-```text
-Sales Manager
-     ↓
-CRM Specialist
-Research Specialist
-     ↓
-Recommendation
-```
-
-Agent 尚未執行時顯示：
+Railway Persistent Volume 掛載於：
 
 ```text
-Waiting
+/data
 ```
 
-完成後會顯示：
+目前 production 使用：
 
 ```text
-Completed
+/data/crm.db
+/data/sales_sessions.db
+/data/usage.db
 ```
 
-這可以讓使用者與面試官比較直觀地理解系統內部正在發生什麼事情。
+分別保存 CRM Records、Pending Approval State、Interrupted RunState、Conversation Sessions、Daily AI Usage Counters 與 Cached Review Responses。
 
 ---
 
-## Dashboard Navigation
+## Synthetic Demo Data
 
-Frontend 使用單頁 React Dashboard。
+Demo CRM 中包含 synthetic records。
 
-Sidebar 包含：
+**NovaTech 是刻意建立的 Synthetic Demo Data。**
 
-- Overview
-- Pipeline
-- AI Review
-- Approvals
-- Agent Activity
-
-Sidebar 使用 Smooth Scroll 在同一頁不同 Section 之間導航。
-
-目前沒有使用 React Router，也沒有將 Dashboard 拆成多頁。
-
-這是刻意的設計選擇，因為目前作品重點是 AI workflow，而不是建立複雜 frontend routing architecture。
-
----
-
-## Architecture
-
-```text
-React / Vercel
-      ↓
-FastAPI / Railway
-      ↓
-Sales Manager
-   ↙          ↘
-CRM Specialist   Research Specialist
-      ↓
-Guardrails + Human Approval
-      ↓
-Persistent SQLite Storage
-```
-
-完整架構、Durable HITL 與 RunState Resume 流程：
-
-**[查看完整系統架構 →](./docs/architecture.md)**
+系統不會因為網路上存在同名公司，就把相關外部公開資訊直接當成 Demo CRM 中 Kevin Chen 所屬公司的真實資料。
 
 ---
 
 ## Tech Stack
 
-### AI / Agent
+### AI / Agent Layer
 
 - OpenAI Agents SDK
 - Multi-Agent Orchestration
@@ -509,6 +283,7 @@ Persistent SQLite Storage
 - Tool Guardrails
 - Human-in-the-Loop
 - RunState Persistence
+- Web Research Tools
 - SQLite-backed Conversation Sessions
 
 ### Backend
@@ -525,19 +300,18 @@ Persistent SQLite Storage
 - JavaScript
 - Vite
 - Fetch API
+- Cloudflare Turnstile
 
 ### Deployment
 
+- Vercel
 - Railway
 - Railway Persistent Volume
-- Vercel
 - GitHub
 
 ---
 
 ## API Overview
-
-目前主要 Endpoint：
 
 ```text
 GET  /health
@@ -554,42 +328,69 @@ GET  /agent/pending
 POST /agent/approve
 ```
 
-FastAPI Swagger：
+Swagger：
 
 https://ai-sales-assistant-production-6111.up.railway.app/docs
 
 ---
 
-## Production Persistence
+## Local Development
 
-Railway Backend 已掛載 Persistent Volume。
+### Backend
 
-Production environment path：
-
-```text
-CRM_DB_PATH=/data/crm.db
-
-SALES_SESSION_DB_PATH=/data/sales_sessions.db
+```bash
+python -m venv .venv
 ```
 
-Persistent Storage 用於：
+Windows：
 
-- CRM records
-- Agent conversation sessions
-- Pending approvals
-- Interrupted workflow state
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --reload
+```
 
-Production 已實際測試 Railway Redeploy 後資料仍然存在。
+Backend: `http://127.0.0.1:8000`  
+Swagger: `http://127.0.0.1:8000/docs`
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend: `http://localhost:5173`
+
+### Environment Variables
+
+Backend secrets 應放在本機 `.env` 或 deployment environment variables，不應 commit 到 Git。
+
+```text
+OPENAI_API_KEY
+PUBLIC_DEMO_MODE
+TURNSTILE_ENABLED
+TURNSTILE_SECRET_KEY
+DAILY_REVIEW_LIMIT
+DAILY_REVIEW_CACHE_SECONDS
+AGENT_TASK_DAILY_LIMIT
+DATA_DIR
+```
+
+Frontend build-time variables：
+
+```text
+VITE_API_BASE_URL
+VITE_TURNSTILE_SITE_KEY
+```
 
 ---
 
 ## Reliability Design
 
-這個專案刻意不讓單一 Agent 擁有整個系統的無限制控制權。
+目前 reliability mechanisms 包含：
 
-目前包含的 Reliability Design：
-
-- Structured CRM Data
 - Deterministic Lead Scoring
 - Agent Responsibility Separation
 - CRM / External Research Separation
@@ -599,89 +400,25 @@ Production 已實際測試 Railway Redeploy 後資料仍然存在。
 - RunState Restoration
 - Session Isolation
 - Synthetic Data Protection
-- Reliability Warnings
 - Post-Approval CRM Verification
+- Persistent Storage
+- Turnstile Verification
+- Server-side Response Cache
+- Daily Usage Quotas
+- Concurrency Controls
+- Public Demo Restrictions
 
-這套系統的目標不是追求：
-
-```text
-Maximum Autonomy
-```
-
-而是回答：
-
-> **哪些任務適合自動化？哪些操作應該使用 deterministic controls？哪些重要行為仍然需要 Human-in-the-Loop？**
-
----
-
-## 為什麼做這個專案
-
-很多 AI Agent Demo 的流程停在：
-
-```text
-Prompt
-→ Agent
-→ Tool
-→ Answer
-```
-
-但真正進到商業系統後，還會出現很多其他問題：
-
-- 多個 Agent 應該如何分工？
-- 哪些邏輯應該由程式決定，而不是 LLM？
-- Agent 怎麼使用結構化 CRM Data？
-- AI 想修改重要資料時怎麼辦？
-- 每個 Tool Call 都應該被允許嗎？
-- 如何加入 Human Approval？
-- Backend restart 後 Pending Approval 怎麼辦？
-- 被 interrupt 的 Agent 如何恢復？
-- 不同 Conversation 怎麼避免 context 混在一起？
-- Internal CRM Facts 與 External Research 如何分離？
-
-AI Sales Copilot 就是針對這些問題建立的作品。
-
----
-
-## Production-Tested Workflows
-
-目前 Production 已測試：
-
-- Frontend / Backend integration
-- CRM persistence
-- Daily Pipeline Review
-- Lead Scoring
-- Multi-Agent Orchestration
-- CRM Specialist
-- Research Specialist
-- Buying Signals
-- Recommended Actions
-- Reliability Warnings
-- Synthetic Company Protection
-- Tool Guardrails
-- Human-in-the-Loop Approval
-- Durable Pending Approval
-- Railway Redeploy Persistence
-- RunState Restoration
-- Agent Resume
-- CRM Write after Approval
-- Pending Approval Cleanup
-- Multi-Session Isolation
-- Sidebar Section Navigation
+> **設計目標是 Controlled Automation，而不是 Maximum Autonomy。**
 
 ---
 
 ## 目前 Scope
 
-這個專案目前的重點是：
+目前重點是建立一條可靠、可解釋、可實際部署的 end-to-end AI workflow，而不是完整 Enterprise CRM Platform。
 
-**完成一條可靠、可展示、可以實際部署的 end-to-end AI workflow。**
+後續可以擴充：
 
-它目前並不是完整 Enterprise CRM Platform。
-
-後續可擴充：
-
-- Authentication
-- Role-Based Access Control
+- Authentication / Role-Based Access Control
 - PostgreSQL
 - Real CRM Integration
 - Agent Observability
@@ -691,27 +428,28 @@ AI Sales Copilot 就是針對這些問題建立的作品。
 - Approval History / Audit Log
 - Expanded Automated Testing
 
-這些目前刻意沒有繼續加入，以避免 Demo Scope 無限制膨脹。
-
 ---
 
-## Project Goal
+## 為什麼做這個專案
 
-AI Sales Copilot 是一個 Applied AI System Design Portfolio Project。
-
-重點不是只有 Prompt Engineering，而是整合：
+很多 AI Agent Demo 停在：
 
 ```text
-AI Agents
-+
-Business Workflow
-+
-Structured Data
-+
-Human Oversight
-+
-Production Deployment
+Prompt
+→ Agent
+→ Tool Call
+→ Answer
 ```
+
+但進到實際 Business System 後，還要處理：
+
+- Multi-Agent 怎麼分工？
+- 哪些 decision 應該保持 deterministic？
+- Agent 怎麼使用 Structured Business Data？
+- AI 想修改重要資料時怎麼辦？
+- Interrupted Workflow 如何 Resume？
+- 不同 Conversation 怎麼維持 Session Isolation？
+- 公開 AI Demo 時，怎麼避免昂貴 endpoint 被濫用？
 
 ---
 
@@ -722,6 +460,4 @@ Production Deployment
 M.S. Business Analytics  
 B.S. Electrical Engineering
 
-Focus Areas：
-
-AI Solutions · Technical Product Management · Applied AI · Agent Systems
+**AI Solutions · Technical Product Management · Applied AI · Agent Systems**
