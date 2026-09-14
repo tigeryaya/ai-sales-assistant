@@ -3,10 +3,23 @@
 .env.*
 !.env.example
 
-# SQLite databases
-*.db
-*.db-shm
-*.db-wal
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+
+# SQLite runtime databases
+usage.db
+usage.db-shm
+usage.db-wal
+
+sales_sessions.db
+sales_sessions.db-shm
+sales_sessions.db-wal
+
+# Keep demo CRM database
+!crm.db
+
 
 # Python
 __pycache__/
@@ -14,11 +27,14 @@ __pycache__/
 .venv/
 venv/
 
+
 # Node / React
 node_modules/
 frontend/node_modules/
+
 dist/
 frontend/dist/
+
 
 # IDE / OS
 .vscode/

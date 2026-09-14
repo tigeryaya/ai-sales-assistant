@@ -1,8 +1,10 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Literal
+from turnstile import verify_turnstile
 from ai_service import analyze_lead
 from lead_scoring import calculate_lead_score
 from agent_service import (
@@ -21,13 +23,31 @@ from database import (
     update_customer_status_in_db
 )
 
+from usage_guard import (
+    init_usage_db,
+    daily_review_lock,
+    get_cached_daily_review,
+    save_daily_review_cache,
+    reserve_daily_generation,
+    get_daily_usage,
+    DAILY_REVIEW_LIMIT,
+    agent_task_lock,
+    reserve_agent_task,
+    get_agent_task_usage,
+    AGENT_TASK_DAILY_LIMIT
+)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_usage_db()
     yield
 
 
-
+PUBLIC_DEMO_MODE = (
+    os.getenv("PUBLIC_DEMO_MODE", "true").lower()
+    == "true"
+)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -63,6 +83,7 @@ class CustomerStatusUpdate(BaseModel):
 class AgentTask(BaseModel):
     session_id: str
     task: str
+    turnstile_token: str
 
 class ApprovalRequest(BaseModel):
     run_id: str
@@ -73,7 +94,11 @@ class ResearchTask(BaseModel):
 class ManagerTask(BaseModel):
     task: str
 
+class AgentApproveRequest(BaseModel):
+    run_id: str
 
+class PipelineReviewRequest(BaseModel):
+    turnstile_token: str | None = None
 
 @app.get("/health")
 def health_check():
@@ -195,14 +220,55 @@ def get_customer_ai_analysis(customer_id: int):
 
 @app.post("/agent/run")
 async def run_agent(agent_task: AgentTask):
-    return await run_sales_agent_task(
-        agent_task.task,
-        agent_task.session_id
+
+    turnstile_valid = await verify_turnstile(
+        agent_task.turnstile_token
     )
 
+    if not turnstile_valid:
+        raise HTTPException(
+            status_code=403,
+            detail="Turnstile verification failed."
+        )
+
+    async with agent_task_lock:
+
+        allowed, usage_count = reserve_agent_task()
+
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Daily Agent Task limit reached. "
+                    "Please try again tomorrow."
+                )
+            )
+
+        result = await run_sales_agent_task(
+            agent_task.task,
+            agent_task.session_id
+        )
+
+        return {
+            **result,
+            "protection": {
+                "turnstile_verified": True,
+                "daily_agent_task_count": usage_count,
+                "daily_agent_task_limit": AGENT_TASK_DAILY_LIMIT
+            }
+        }
 
 @app.post("/agent/approve")
-async def approve_agent(request: ApprovalRequest):
+async def agent_approve(request: AgentApproveRequest):
+
+    if PUBLIC_DEMO_MODE:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Approval execution is disabled in public demo mode. "
+                "Human-in-the-loop approval is available in the private demo."
+            )
+        )
 
     result = await approve_pending_run(
         request.run_id
@@ -234,6 +300,89 @@ async def run_manager(request: ManagerTask):
 
 
 @app.post("/pipeline/review")
-async def generate_pipeline_review():
+async def pipeline_review(
+    request: PipelineReviewRequest | None = None
+):
 
-    return await run_daily_pipeline_review()
+    # 1. Cached responses are cheap.
+    #    If cache exists, return it immediately.
+    cached_review = get_cached_daily_review()
+
+    if cached_review is not None:
+        current_usage = get_daily_usage()
+
+        return {
+            **cached_review,
+            "protection": {
+                "cached": True,
+                "turnstile_verified": False,
+                "daily_generation_count": current_usage,
+                "daily_generation_limit": DAILY_REVIEW_LIMIT
+            }
+        }
+
+    # 2. No cache = this request may trigger an expensive AI run.
+    #    Verify Turnstile before touching quota or OpenAI.
+    turnstile_token = (
+        request.turnstile_token
+        if request is not None
+        else ""
+    )
+
+    turnstile_valid = await verify_turnstile(
+        turnstile_token
+    )
+
+    if not turnstile_valid:
+        raise HTTPException(
+            status_code=403,
+            detail="Turnstile verification failed."
+        )
+
+    # 3. Only one expensive generation at a time.
+    async with daily_review_lock:
+
+        # Another request may have generated a review
+        # while this request was waiting.
+        cached_review = get_cached_daily_review()
+
+        if cached_review is not None:
+            current_usage = get_daily_usage()
+
+            return {
+                **cached_review,
+                "protection": {
+                    "cached": True,
+                    "turnstile_verified": True,
+                    "daily_generation_count": current_usage,
+                    "daily_generation_limit": DAILY_REVIEW_LIMIT
+                }
+            }
+
+        # 4. Reserve one generation slot.
+        allowed, generation_count = reserve_daily_generation()
+
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Daily AI generation limit reached. "
+                    "Please try again tomorrow."
+                )
+            )
+
+        # 5. Only now do we spend AI/API resources.
+        result = await run_daily_pipeline_review()
+
+        # 6. Cache successful result.
+        save_daily_review_cache(result)
+
+        return {
+            **result,
+            "protection": {
+                "cached": False,
+                "turnstile_verified": True,
+                "daily_generation_count": generation_count,
+                "daily_generation_limit": DAILY_REVIEW_LIMIT
+            }
+        }

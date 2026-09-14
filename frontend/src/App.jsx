@@ -1,15 +1,27 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import "./App.css";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
   "http://127.0.0.1:8000";
 
+const TURNSTILE_SITE_KEY =
+  import.meta.env.VITE_TURNSTILE_SITE_KEY;
+
 function App() {
   const [review, setReview] = useState(null);
   const [trace, setTrace] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const turnstileContainerRef = useRef(null);
+  const turnstileWidgetIdRef = useRef(null);
+
+  const [turnstileToken, setTurnstileToken] =
+    useState("");
 
   const [pendingData, setPendingData] = useState({
     count: 0,
@@ -24,6 +36,78 @@ function App() {
 
   useEffect(() => {
     loadPendingApprovals();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer = null;
+
+    if (!TURNSTILE_SITE_KEY) {
+      setError(
+        "Turnstile site key is missing. Check frontend/.env."
+      );
+      return undefined;
+    }
+
+    function renderTurnstile() {
+      if (cancelled) {
+        return;
+      }
+
+      if (
+        window.turnstile &&
+        turnstileContainerRef.current &&
+        turnstileWidgetIdRef.current === null
+      ) {
+        turnstileWidgetIdRef.current =
+          window.turnstile.render(
+            turnstileContainerRef.current,
+            {
+              sitekey: TURNSTILE_SITE_KEY,
+
+              callback: (token) => {
+                setTurnstileToken(token);
+              },
+
+              "expired-callback": () => {
+                setTurnstileToken("");
+              },
+
+              "error-callback": () => {
+                setTurnstileToken("");
+              },
+            }
+          );
+
+        return;
+      }
+
+      retryTimer = setTimeout(
+        renderTurnstile,
+        200
+      );
+    }
+
+    renderTurnstile();
+
+    return () => {
+      cancelled = true;
+
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+
+      if (
+        window.turnstile &&
+        turnstileWidgetIdRef.current !== null
+      ) {
+        window.turnstile.remove(
+          turnstileWidgetIdRef.current
+        );
+
+        turnstileWidgetIdRef.current = null;
+      }
+    };
   }, []);
 
   function scrollToSection(sectionId) {
@@ -44,20 +128,33 @@ function App() {
       setLoading(true);
       setError("");
 
+      if (!turnstileToken) {
+        throw new Error(
+          "Please complete the security check first."
+        );
+      }
+
       const response = await fetch(
         `${API_BASE}/pipeline/review`,
         {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            turnstile_token: turnstileToken,
+          }),
         }
       );
 
+      const data = await response.json();
+
       if (!response.ok) {
         throw new Error(
-          "Failed to generate daily review."
+          data.detail ||
+            "Failed to generate daily review."
         );
       }
-
-      const data = await response.json();
 
       setReview(data.review);
       setTrace(data.trace || []);
@@ -65,6 +162,16 @@ function App() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setTurnstileToken("");
+
+      if (
+        window.turnstile &&
+        turnstileWidgetIdRef.current !== null
+      ) {
+        window.turnstile.reset(
+          turnstileWidgetIdRef.current
+        );
+      }
     }
   }
 
@@ -269,15 +376,22 @@ function App() {
             </p>
           </div>
 
-          <button
-            className="primary-button"
-            onClick={generateDailyReview}
-            disabled={loading}
-          >
-            {loading
-              ? "Generating..."
-              : "Generate Daily Review"}
-          </button>
+          <div>
+            <div
+              ref={turnstileContainerRef}
+              style={{ marginBottom: "12px" }}
+            />
+
+            <button
+              className="primary-button"
+              onClick={generateDailyReview}
+              disabled={loading || !turnstileToken}
+            >
+              {loading
+                ? "Generating..."
+                : "Generate Daily Review"}
+            </button>
+          </div>
         </header>
 
         {error && (
