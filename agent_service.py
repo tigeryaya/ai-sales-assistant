@@ -20,11 +20,15 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-SALES_SESSION_DB_PATH = os.getenv(
-    "SALES_SESSION_DB_PATH",
+
+
+
+DATA_DIR = os.getenv("DATA_DIR", ".")
+
+SALES_SESSION_DB_PATH = os.path.join(
+    DATA_DIR,
     "sales_sessions.db"
 )
-
 
 
 

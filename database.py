@@ -1,21 +1,93 @@
 import os
+import shutil
 import sqlite3
+
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+DATA_DIR = os.getenv(
+    "DATA_DIR",
+    "."
+)
 
 DB_PATH = os.getenv(
     "CRM_DB_PATH",
+    os.path.join(
+        DATA_DIR,
+        "crm.db"
+    )
+)
+
+# The demo CRM database committed with the project.
+SEED_DB_PATH = os.path.join(
+    BASE_DIR,
     "crm.db"
 )
 
 
+def prepare_database():
+    """
+    Ensure the database directory exists.
+
+    On Railway:
+        DATA_DIR=/data
+        DB_PATH=/data/crm.db
+
+    If the persistent database does not exist yet,
+    copy the demo CRM database into the mounted volume.
+    """
+
+    db_directory = os.path.dirname(
+        os.path.abspath(DB_PATH)
+    )
+
+    os.makedirs(
+        db_directory,
+        exist_ok=True
+    )
+
+    target_path = os.path.abspath(
+        DB_PATH
+    )
+
+    seed_path = os.path.abspath(
+        SEED_DB_PATH
+    )
+
+    if (
+        target_path != seed_path
+        and not os.path.exists(target_path)
+        and os.path.exists(seed_path)
+    ):
+        shutil.copy2(
+            seed_path,
+            target_path
+        )
+
+
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+
+    prepare_database()
+
+    conn = sqlite3.connect(
+        DB_PATH
+    )
+
     conn.row_factory = sqlite3.Row
+
     return conn
 
+
 def init_db():
+
+    prepare_database()
+
     conn = get_db_connection()
 
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS customers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -25,18 +97,23 @@ def init_db():
             interest TEXT NOT NULL,
             lead_status TEXT NOT NULL DEFAULT 'new'
         )
-    """)
-
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS pending_runs (
-        run_id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        state_json TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        """
     )
-""")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pending_runs (
+            run_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            state_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
     conn.commit()
     conn.close()
+
 
 def create_customer(
     name: str,
@@ -45,6 +122,7 @@ def create_customer(
     budget: int,
     interest: str
 ):
+
     conn = get_db_connection()
 
     cursor = conn.execute(
@@ -58,7 +136,13 @@ def create_customer(
         )
         VALUES (?, ?, ?, ?, ?)
         """,
-        (name, company, email, budget, interest)
+        (
+            name,
+            company,
+            email,
+            budget,
+            interest
+        )
     )
 
     conn.commit()
@@ -69,7 +153,9 @@ def create_customer(
 
     return customer_id
 
+
 def get_all_customers():
+
     conn = get_db_connection()
 
     rows = conn.execute(
@@ -78,13 +164,24 @@ def get_all_customers():
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    return [
+        dict(row)
+        for row in rows
+    ]
 
-def get_customer_by_id(customer_id: int):
+
+def get_customer_by_id(
+    customer_id: int
+):
+
     conn = get_db_connection()
 
     row = conn.execute(
-        "SELECT * FROM customers WHERE id = ?",
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
         (customer_id,)
     ).fetchone()
 
@@ -100,6 +197,7 @@ def update_customer_status_in_db(
     customer_id: int,
     lead_status: str
 ):
+
     conn = get_db_connection()
 
     cursor = conn.execute(
@@ -108,7 +206,10 @@ def update_customer_status_in_db(
         SET lead_status = ?
         WHERE id = ?
         """,
-        (lead_status, customer_id)
+        (
+            lead_status,
+            customer_id
+        )
     )
 
     conn.commit()
@@ -118,7 +219,11 @@ def update_customer_status_in_db(
         return None
 
     row = conn.execute(
-        "SELECT * FROM customers WHERE id = ?",
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
         (customer_id,)
     ).fetchone()
 
@@ -127,12 +232,12 @@ def update_customer_status_in_db(
     return dict(row)
 
 
-
 def save_pending_run(
     run_id: str,
     session_id: str,
     state_json: str
 ):
+
     conn = get_db_connection()
 
     conn.execute(
@@ -155,7 +260,10 @@ def save_pending_run(
     conn.close()
 
 
-def get_pending_run(run_id: str):
+def get_pending_run(
+    run_id: str
+):
+
     conn = get_db_connection()
 
     row = conn.execute(
@@ -174,7 +282,9 @@ def get_pending_run(run_id: str):
 
     return dict(row)
 
+
 def get_all_pending_runs():
+
     conn = get_db_connection()
 
     rows = conn.execute(
@@ -187,10 +297,16 @@ def get_all_pending_runs():
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    return [
+        dict(row)
+        for row in rows
+    ]
 
 
-def delete_pending_run(run_id: str):
+def delete_pending_run(
+    run_id: str
+):
+
     conn = get_db_connection()
 
     conn.execute(

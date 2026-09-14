@@ -8,7 +8,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-USAGE_DB = "usage.db"
+DATA_DIR = os.getenv("DATA_DIR", ".")
+
+USAGE_DB = os.path.join(
+    DATA_DIR,
+    "usage.db"
+)
 
 DAILY_REVIEW_LIMIT = int(
     os.getenv("DAILY_REVIEW_LIMIT", "20")
